@@ -6,6 +6,7 @@ export interface MergePlan {
   survivor: Contact;
   deleteIds: string[];
   original: Contact;
+  deletedContacts?: Contact[];
 }
 
 const SCALAR_FIELDS: Array<keyof Contact> = [
@@ -116,5 +117,6 @@ export function mergeContacts(contacts: Contact[], survivorId?: string): MergePl
     survivor: merged,
     deleteIds: others.map((c) => c.id),
     original: survivor,
+    deletedContacts: others,
   };
 }
