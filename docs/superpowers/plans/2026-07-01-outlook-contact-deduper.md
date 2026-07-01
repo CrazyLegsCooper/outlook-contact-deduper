@@ -17,6 +17,7 @@
 - **Never commit personal data:** contact backups (`contacts-backup-*.json`), any exported contacts, and `src/config.ts` are git-ignored (already in `.gitignore`). Do not add exceptions.
 - **Graph write batching:** `$batch` with ≤20 sub-requests per call; honor `429 Retry-After`.
 - **No deletes without consent:** a contact is only `DELETE`d after a bulk-approve click or an individual confirm in the UI.
+- **UI design system:** all UI (Tasks 10–12) MUST follow `docs/design-system.md` — Tailwind + the CSS-variable tokens, Inter font, `lucide-react` icons (never emoji), semantic color classes (no raw hex in components), confidence badges, diff-highlighted merge previews, and the sticky undo bar. Meet the accessibility bar there (contrast ≥ 4.5:1, visible focus rings, `prefers-reduced-motion`).
 - **Discipline:** TDD for the engine and all pure helpers; DRY; YAGNI; commit after every task.
 
 ---
@@ -25,13 +26,14 @@
 
 **Files:**
 - Create: `package.json`, `vite.config.ts`, `tsconfig.json`, `tsconfig.node.json`, `index.html`, `src/main.tsx`, `src/App.tsx`, `src/vite-env.d.ts`
+- Create: `tailwind.config.js`, `postcss.config.js`, `src/index.css` (design tokens)
 - Create: `src/config.example.ts`
-- Create: `src/engine/.gitkeep`, `src/auth/.gitkeep`, `src/graph/.gitkeep`, `src/ui/.gitkeep`, `test/.gitkeep`
+- Create: `src/engine/.gitkeep`, `src/auth/.gitkeep`, `src/graph/.gitkeep`, `src/ui/.gitkeep`, `src/ui/components/.gitkeep`, `test/.gitkeep`
 - Create: `test/smoke.test.ts`
 
 **Interfaces:**
-- Consumes: nothing.
-- Produces: a runnable dev server at `http://localhost:5173`; `npm test` runs Vitest; `config.example.ts` exporting `appConfig` shape `{ clientId: string; redirectUri: string; authority: string; scopes: string[] }`.
+- Consumes: `docs/design-system.md` (color tokens, typography, Tailwind approach).
+- Produces: a runnable dev server at `http://localhost:5173`; Tailwind + Inter + design tokens available app-wide; `npm test` runs Vitest; `config.example.ts` exporting `appConfig` shape `{ clientId: string; redirectUri: string; authority: string; scopes: string[] }`.
 
 - [ ] **Step 1: Create `package.json`**
 
@@ -51,6 +53,8 @@
   "dependencies": {
     "@azure/msal-browser": "^3.10.0",
     "@azure/msal-react": "^2.0.12",
+    "@fontsource/inter": "^5.0.0",
+    "lucide-react": "^0.379.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
@@ -58,6 +62,9 @@
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.2.0",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
     "typescript": "^5.4.0",
     "vite": "^5.2.0",
     "vitest": "^1.4.0"
@@ -151,6 +158,11 @@ export default function App() {
 ```tsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
+import './index.css';
 import App from './App';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -158,6 +170,78 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>,
 );
+```
+
+> Note: `src/main.tsx` is rewritten in Task 7 to add `MsalProvider`; keep these
+> font/CSS imports when you do.
+
+- [ ] **Step 3b: Set up Tailwind + design tokens (per `docs/design-system.md`)**
+
+`tailwind.config.js`:
+```js
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        primary: 'var(--color-primary)',
+        'primary-fg': 'var(--color-primary-fg)',
+        accent: 'var(--color-accent)',
+        danger: 'var(--color-danger)',
+        success: 'var(--color-success)',
+        bg: 'var(--color-bg)',
+        surface: 'var(--color-surface)',
+        fg: 'var(--color-fg)',
+        'muted-fg': 'var(--color-muted-fg)',
+        border: 'var(--color-border)',
+        ring: 'var(--color-ring)',
+      },
+      fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+    },
+  },
+  plugins: [],
+};
+```
+
+`postcss.config.js`:
+```js
+export default { plugins: { tailwindcss: {}, autoprefixer: {} } };
+```
+
+`src/index.css`:
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary: #0D9488;
+  --color-primary-fg: #FFFFFF;
+  --color-accent: #EA580C;
+  --color-danger: #DC2626;
+  --color-success: #059669;
+  --color-bg: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-fg: #0F172A;
+  --color-muted-fg: #64748B;
+  --color-border: #E2E8F0;
+  --color-ring: #0D9488;
+}
+
+html, body, #root { height: 100%; }
+body { background: var(--color-bg); color: var(--color-fg); font-family: 'Inter', system-ui, sans-serif; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+```
+
+Update `src/App.tsx` from Step 3 to prove Tailwind works:
+```tsx
+export default function App() {
+  return <h1 className="p-6 text-2xl font-bold text-primary">Outlook Contact Deduper</h1>;
+}
 ```
 
 - [ ] **Step 4: Create `src/config.example.ts`**
@@ -194,13 +278,13 @@ Run: `cd /d D:\repos\outlook-contact-deduper && npm install && npm test`
 Expected: install completes; Vitest prints `1 passed`.
 
 Run: `npm run dev` then open `http://localhost:5173`.
-Expected: page shows "Outlook Contact Deduper". Stop the dev server (Ctrl+C) after confirming.
+Expected: page shows "Outlook Contact Deduper" in teal (`text-primary`) Inter bold — confirms Tailwind + tokens + font load. Stop the dev server (Ctrl+C) after confirming.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add -A
-git commit -m "chore: scaffold Vite + React + TS + Vitest"
+git commit -m "chore: scaffold Vite + React + TS + Vitest + Tailwind design tokens"
 ```
 
 ---
@@ -1664,19 +1748,91 @@ git commit -m "feat(graph): $batch apply with 429 handling and single-merge undo
 
 ### Task 10: App shell, load + analyze summary
 
+> **Design system (MUST follow `docs/design-system.md`):** all components use
+> Tailwind + the design tokens, Inter, and `lucide-react` icons. No inline
+> styles, no raw hex, no emoji. This task also creates the shared primitives the
+> later UI tasks reuse.
+
 **Files:**
+- Create: `src/ui/components/Button.tsx`, `src/ui/components/ConfidenceBadge.tsx`, `src/ui/components/Card.tsx`
 - Create: `src/ui/useDeduper.ts` (state hook)
 - Create: `src/ui/Summary.tsx`
 - Rewrite: `src/App.tsx` (state machine: signin → loading → summary)
 
 **Interfaces:**
-- Consumes: `getAccessToken` (Task 7); `listAllContacts`, `downloadBackup` (Task 8); `analyze`, `AnalyzeResult`, `Group` (Task 5); `Contact` (Task 2).
+- Consumes: `docs/design-system.md`; `getAccessToken` (Task 7); `listAllContacts`, `downloadBackup` (Task 8); `analyze`, `AnalyzeResult`, `Group` (Task 5); `Bucket` (Task 4); `Contact` (Task 2).
 - Produces:
+  - `<Button variant='primary'|'secondary'|'ghost'|'danger' … />`, `<ConfidenceBadge bucket={Bucket} />`, `<Card interactive? … />`
   - `type Phase = 'idle' | 'loading' | 'ready' | 'applying' | 'done'`
   - `useDeduper()` hook returning `{ phase, contacts, result, load, ... }` (extended in Tasks 11–12).
   - `<Summary result={...} onReviewVeryLikely onReviewNotSure />`
 
-- [ ] **Step 1: Create `src/ui/useDeduper.ts`**
+- [ ] **Step 1: Create shared UI primitives** (per `docs/design-system.md`)
+
+`src/ui/components/Button.tsx`:
+```tsx
+import type { ButtonHTMLAttributes } from 'react';
+
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
+
+const VARIANTS: Record<Variant, string> = {
+  primary: 'bg-primary text-primary-fg hover:brightness-95',
+  secondary: 'bg-white text-fg border border-border hover:bg-slate-50',
+  ghost: 'text-muted-fg hover:bg-slate-100',
+  danger: 'bg-danger text-white hover:brightness-95',
+};
+
+export function Button(
+  { variant = 'primary', className = '', ...props }:
+  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant },
+) {
+  return (
+    <button
+      className={`h-10 px-4 rounded-lg font-semibold text-sm transition disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer ${VARIANTS[variant]} ${className}`}
+      {...props}
+    />
+  );
+}
+```
+
+`src/ui/components/ConfidenceBadge.tsx`:
+```tsx
+import { CheckCircle2, HelpCircle } from 'lucide-react';
+import type { Bucket } from '../../engine/match';
+
+export function ConfidenceBadge({ bucket }: { bucket: Bucket }) {
+  const isVL = bucket === 'very-likely';
+  const cls = isVL
+    ? 'bg-teal-50 text-teal-700 border-teal-200'
+    : 'bg-orange-50 text-orange-700 border-orange-200';
+  const Icon = isVL ? CheckCircle2 : HelpCircle;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-xs font-medium ${cls}`}>
+      <Icon size={14} aria-hidden />
+      {isVL ? 'Very likely' : 'Not sure'}
+    </span>
+  );
+}
+```
+
+`src/ui/components/Card.tsx`:
+```tsx
+import type { HTMLAttributes } from 'react';
+
+export function Card(
+  { interactive = false, className = '', ...props }:
+  HTMLAttributes<HTMLDivElement> & { interactive?: boolean },
+) {
+  return (
+    <div
+      className={`bg-surface border border-border rounded-xl shadow-sm p-4 ${interactive ? 'hover:shadow-md transition cursor-pointer' : ''} ${className}`}
+      {...props}
+    />
+  );
+}
+```
+
+- [ ] **Step 2: Create `src/ui/useDeduper.ts`**
 
 ```ts
 import { useState, useCallback } from 'react';
@@ -1716,10 +1872,13 @@ export function useDeduper() {
 }
 ```
 
-- [ ] **Step 2: Create `src/ui/Summary.tsx`**
+- [ ] **Step 3: Create `src/ui/Summary.tsx`**
 
 ```tsx
 import type { AnalyzeResult } from '../engine/analyze';
+import { Card } from './components/Card';
+import { Button } from './components/Button';
+import { ConfidenceBadge } from './components/ConfidenceBadge';
 
 export function Summary({
   result, onReviewVeryLikely, onReviewNotSure,
@@ -1731,31 +1890,42 @@ export function Summary({
   const vlContacts = result.veryLikely.reduce((n, g) => n + g.ids.length, 0);
   const nsContacts = result.notSure.reduce((n, g) => n + g.ids.length, 0);
   return (
-    <div style={{ padding: 24 }}>
-      <h1>Analysis complete</h1>
-      <p>{result.totalContacts} contacts scanned. Backup downloaded.</p>
-      <ul>
-        <li>
-          <strong>{result.veryLikely.length}</strong> very-likely duplicate groups ({vlContacts} contacts){' '}
-          <button disabled={!result.veryLikely.length} onClick={onReviewVeryLikely}>Review</button>
-        </li>
-        <li>
-          <strong>{result.notSure.length}</strong> not-sure groups ({nsContacts} contacts){' '}
-          <button disabled={!result.notSure.length} onClick={onReviewNotSure}>Review</button>
-        </li>
-      </ul>
+    <div className="mx-auto max-w-3xl p-6">
+      <h1 className="text-3xl font-bold">Analysis complete</h1>
+      <p className="mt-1 text-muted-fg tabular-nums">
+        {result.totalContacts} contacts scanned · backup downloaded
+      </p>
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <Card>
+          <ConfidenceBadge bucket="very-likely" />
+          <p className="mt-2 text-2xl font-semibold tabular-nums">{result.veryLikely.length}</p>
+          <p className="text-sm text-muted-fg">groups · {vlContacts} contacts</p>
+          <Button className="mt-3 w-full" disabled={!result.veryLikely.length} onClick={onReviewVeryLikely}>
+            Review &amp; bulk-approve
+          </Button>
+        </Card>
+        <Card>
+          <ConfidenceBadge bucket="not-sure" />
+          <p className="mt-2 text-2xl font-semibold tabular-nums">{result.notSure.length}</p>
+          <p className="text-sm text-muted-fg">groups · {nsContacts} contacts</p>
+          <Button variant="secondary" className="mt-3 w-full" disabled={!result.notSure.length} onClick={onReviewNotSure}>
+            Review one-by-one
+          </Button>
+        </Card>
+      </div>
     </div>
   );
 }
 ```
 
-- [ ] **Step 3: Rewrite `src/App.tsx`**
+- [ ] **Step 4: Rewrite `src/App.tsx`**
 
 ```tsx
 import { useState } from 'react';
 import { AuthGate } from './auth/AuthGate';
 import { useDeduper } from './ui/useDeduper';
 import { Summary } from './ui/Summary';
+import { Button } from './ui/components/Button';
 
 type Screen = 'summary' | 'very-likely' | 'not-sure';
 
@@ -1766,13 +1936,20 @@ export default function App() {
   return (
     <AuthGate>
       {d.phase === 'idle' && (
-        <div style={{ padding: 24 }}>
-          <h1>Outlook Contact Deduper</h1>
-          {d.error && <p style={{ color: 'crimson' }}>Error: {d.error}</p>}
-          <button onClick={d.load}>Load contacts + analyze</button>
+        <div className="mx-auto max-w-3xl p-6">
+          <h1 className="text-3xl font-bold text-primary">Outlook Contact Deduper</h1>
+          <p className="mt-1 text-muted-fg">Scan your contacts, back them up, and merge duplicates safely.</p>
+          {d.error && (
+            <p className="mt-3 rounded-lg border border-danger/30 bg-red-50 px-3 py-2 text-sm text-danger" role="alert">
+              Error: {d.error}
+            </p>
+          )}
+          <Button className="mt-4" onClick={d.load}>Load contacts + analyze</Button>
         </div>
       )}
-      {d.phase === 'loading' && <p style={{ padding: 24 }}>Loading contacts…</p>}
+      {d.phase === 'loading' && (
+        <div className="mx-auto max-w-3xl p-6 text-muted-fg">Loading contacts…</div>
+      )}
       {d.phase === 'ready' && d.result && screen === 'summary' && (
         <Summary
           result={d.result}
@@ -1786,21 +1963,41 @@ export default function App() {
 }
 ```
 
-- [ ] **Step 4: Manual verification**
+Also update `src/auth/AuthGate.tsx` from Task 7 to use the `Button` primitive and Tailwind (replace the inline-styled sign-in markup):
+```tsx
+// keep the useMsal/useIsAuthenticated logic; render:
+return (
+  <div className="mx-auto max-w-3xl p-6">
+    <h1 className="text-3xl font-bold text-primary">Outlook Contact Deduper</h1>
+    <p className="mt-1 text-muted-fg">Sign in with your personal Microsoft account to begin.</p>
+    <Button className="mt-4"
+      onClick={() => instance.loginPopup(loginRequest).then((r) => instance.setActiveAccount(r.account))}>
+      Sign in
+    </Button>
+  </div>
+);
+// add: import { Button } from '../ui/components/Button';
+```
+
+- [ ] **Step 5: Manual verification**
 
 1. Run: `npm run dev`, sign in, click **Load contacts + analyze**.
-Expected: backup downloads; summary screen shows total count and the two group counts. Buttons enable only when groups exist.
+Expected: backup downloads; the summary shows total count and two token-styled cards (teal "Very likely", orange "Not sure") with tabular counts; buttons enable only when groups exist; focus rings visible when tabbing.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/ui/useDeduper.ts src/ui/Summary.tsx src/App.tsx
-git commit -m "feat(ui): app shell, load, analyze, and summary screen"
+git add src/ui/components src/ui/useDeduper.ts src/ui/Summary.tsx src/App.tsx src/auth/AuthGate.tsx
+git commit -m "feat(ui): design-system primitives, app shell, and summary screen"
 ```
 
 ---
 
 ### Task 11: Very-likely bulk-approve review
+
+> **Design system (MUST follow `docs/design-system.md`):** Tailwind + tokens;
+> reuse `Button`, `Card`, `ConfidenceBadge`; merge previews use diff-highlighted
+> chips for values merged in from the non-survivor. No inline styles / raw hex.
 
 **Files:**
 - Create: `src/ui/MergePreview.tsx`
@@ -1809,9 +2006,9 @@ git commit -m "feat(ui): app shell, load, analyze, and summary screen"
 - Modify: `src/App.tsx` (render `very-likely` screen)
 
 **Interfaces:**
-- Consumes: `Group` (Task 5); `mergeContacts`, `MergePlan` (Task 6); `applyMergePlans`, `ApplyOutcome` (Task 9); `getAccessToken` (Task 7).
+- Consumes: `docs/design-system.md`; `Group` (Task 5); `Bucket` (Task 4); `mergeContacts`, `MergePlan` (Task 6); `normalizeEmail`, `normalizePhone` (Task 2); `applyMergePlans`, `ApplyOutcome` (Task 9); `getAccessToken` (Task 7); primitives `Button`/`Card`/`ConfidenceBadge` (Task 10).
 - Produces:
-  - `<MergePreview plan={MergePlan} />` — renders the merged survivor fields.
+  - `<MergePreview plan={MergePlan} bucket?={Bucket} />` — merged survivor fields with diff-highlighted merged-in chips.
   - `<VeryLikelyReview groups byId onApply onBack />` — checkbox list with "Approve all"/"Apply selected".
   - `useDeduper().applyPlans(plans: MergePlan[]): Promise<void>` (sets phase `applying` → `ready`, stores outcomes and removes merged contacts from state, re-runs `analyze`).
 
@@ -1819,19 +2016,57 @@ git commit -m "feat(ui): app shell, load, analyze, and summary screen"
 
 ```tsx
 import type { MergePlan } from '../engine/merge';
+import type { Bucket } from '../engine/match';
+import { normalizeEmail, normalizePhone } from '../engine/normalize';
+import { Card } from './components/Card';
+import { ConfidenceBadge } from './components/ConfidenceBadge';
 
-export function MergePreview({ plan }: { plan: MergePlan }) {
-  const s = plan.survivor;
-  const phones = [s.mobilePhone, ...(s.homePhones ?? []), ...(s.businessPhones ?? [])].filter(Boolean);
+function Chip({ label, added }: { label: string; added: boolean }) {
   return (
-    <div style={{ border: '1px solid #ccc', padding: 8, margin: '8px 0' }}>
-      <strong>{s.displayName || `${s.givenName ?? ''} ${s.surname ?? ''}`}</strong>
-      <div>emails: {(s.emailAddresses ?? []).map((e) => e.address).join(', ') || '—'}</div>
-      <div>phones: {phones.join(', ') || '—'}</div>
-      {s.jobTitle && <div>title: {s.jobTitle}</div>}
-      {s.companyName && <div>company: {s.companyName}</div>}
-      <div style={{ color: '#666' }}>merging {plan.deleteIds.length + 1} → 1</div>
-    </div>
+    <span className={`inline-block rounded px-1.5 py-0.5 text-sm ${added ? 'bg-emerald-50 text-emerald-800' : 'text-fg'}`}>
+      {added ? '+ ' : ''}{label}
+    </span>
+  );
+}
+
+export function MergePreview({ plan, bucket }: { plan: MergePlan; bucket?: Bucket }) {
+  const s = plan.survivor;
+  const o = plan.original;
+  const origEmails = new Set((o.emailAddresses ?? []).map((e) => normalizeEmail(e.address)));
+  const origPhones = new Set(
+    [o.mobilePhone, ...(o.homePhones ?? []), ...(o.businessPhones ?? [])].map((p) => normalizePhone(p ?? '')),
+  );
+  const emails = s.emailAddresses ?? [];
+  const phones = [s.mobilePhone, ...(s.homePhones ?? []), ...(s.businessPhones ?? [])].filter(Boolean) as string[];
+  const name = s.displayName || `${s.givenName ?? ''} ${s.surname ?? ''}`.trim() || '(no name)';
+  return (
+    <Card>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-lg font-semibold">{name}</h3>
+        {bucket && <ConfidenceBadge bucket={bucket} />}
+      </div>
+      <dl className="mt-3 space-y-2 text-sm">
+        <div className="flex gap-2">
+          <dt className="w-20 shrink-0 text-muted-fg">Emails</dt>
+          <dd className="flex flex-wrap gap-1">
+            {emails.length
+              ? emails.map((e) => <Chip key={e.address} label={e.address} added={!origEmails.has(normalizeEmail(e.address))} />)
+              : <span className="text-muted-fg">—</span>}
+          </dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="w-20 shrink-0 text-muted-fg">Phones</dt>
+          <dd className="flex flex-wrap gap-1">
+            {phones.length
+              ? phones.map((p) => <Chip key={p} label={p} added={!origPhones.has(normalizePhone(p))} />)
+              : <span className="text-muted-fg">—</span>}
+          </dd>
+        </div>
+        {s.jobTitle && <div className="flex gap-2"><dt className="w-20 shrink-0 text-muted-fg">Title</dt><dd>{s.jobTitle}</dd></div>}
+        {s.companyName && <div className="flex gap-2"><dt className="w-20 shrink-0 text-muted-fg">Company</dt><dd>{s.companyName}</dd></div>}
+      </dl>
+      <p className="mt-3 text-xs text-muted-fg tabular-nums">merging {plan.deleteIds.length + 1} → 1</p>
+    </Card>
   );
 }
 ```
@@ -1867,6 +2102,7 @@ import type { Group } from '../engine/analyze';
 import type { Contact } from '../engine/types';
 import { mergeContacts, type MergePlan } from '../engine/merge';
 import { MergePreview } from './MergePreview';
+import { Button } from './components/Button';
 
 export function VeryLikelyReview({
   groups, byId, onApply, onBack,
@@ -1885,25 +2121,38 @@ export function VeryLikelyReview({
   const selected = plans.filter((_, i) => checked[i]);
 
   return (
-    <div style={{ padding: 24 }}>
-      <h1>Very likely duplicates</h1>
-      <p>
-        <button onClick={() => setChecked(plans.map(() => true))}>Approve all</button>{' '}
-        <button onClick={() => setChecked(plans.map(() => false))}>Clear</button>{' '}
-        <button onClick={onBack}>Back</button>
-      </p>
-      {plans.map((plan, i) => (
-        <div key={plan.survivorId} style={{ display: 'flex', gap: 8 }}>
-          <input type="checkbox" checked={checked[i]} onChange={() => toggle(i)} />
-          <div style={{ flex: 1 }}>
-            <div style={{ color: '#666', fontSize: 12 }}>{groups[i].reasons.join(' · ')}</div>
-            <MergePreview plan={plan} />
+    <div className="mx-auto max-w-3xl p-6 pb-24">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Very likely duplicates</h1>
+        <Button variant="ghost" onClick={onBack}>Back</Button>
+      </div>
+      <div className="mt-2 flex gap-2">
+        <Button variant="secondary" onClick={() => setChecked(plans.map(() => true))}>Approve all</Button>
+        <Button variant="ghost" onClick={() => setChecked(plans.map(() => false))}>Clear</Button>
+      </div>
+      <div className="mt-4 space-y-3">
+        {plans.map((plan, i) => (
+          <div key={plan.survivorId} className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              className="mt-5 h-4 w-4 accent-[color:var(--color-primary)]"
+              checked={checked[i]}
+              onChange={() => toggle(i)}
+              aria-label={`Approve merge for ${plan.survivor.displayName ?? plan.survivorId}`}
+            />
+            <div className="flex-1">
+              <p className="mb-1 text-xs text-muted-fg">{groups[i].reasons.join(' · ')}</p>
+              <MergePreview plan={plan} bucket="very-likely" />
+            </div>
           </div>
-        </div>
-      ))}
-      <button disabled={!selected.length} onClick={() => onApply(selected)}>
-        Apply {selected.length} merge(s)
-      </button>
+        ))}
+      </div>
+      <div className="mt-6 flex items-center gap-3">
+        <Button disabled={!selected.length} onClick={() => onApply(selected)}>
+          Apply {selected.length} merge(s)
+        </Button>
+        <span className="text-sm text-muted-fg tabular-nums">{selected.length} of {plans.length} selected</span>
+      </div>
     </div>
   );
 }
@@ -1921,7 +2170,7 @@ Add below the summary block:
     onBack={() => setScreen('summary')}
   />
 )}
-{d.phase === 'applying' && <p style={{ padding: 24 }}>Applying merges…</p>}
+{d.phase === 'applying' && <div className="mx-auto max-w-3xl p-6 text-muted-fg">Applying merges…</div>}
 ```
 Add import: `import { VeryLikelyReview } from './ui/VeryLikelyReview';`
 
@@ -1943,6 +2192,11 @@ git commit -m "feat(ui): very-likely bulk-approve review and apply"
 
 ### Task 12: Not-sure one-by-one review, undo, and done
 
+> **Design system (MUST follow `docs/design-system.md`):** Tailwind + tokens;
+> reuse `Button`, `Card`, `MergePreview`; side-by-side candidate cards with the
+> chosen survivor ring-highlighted; sticky bottom `UndoBar` using `lucide-react`.
+> No inline styles / raw hex / emoji.
+
 **Files:**
 - Create: `src/ui/NotSureReview.tsx`
 - Create: `src/ui/UndoBar.tsx`
@@ -1950,10 +2204,10 @@ git commit -m "feat(ui): very-likely bulk-approve review and apply"
 - Modify: `src/App.tsx` (render `not-sure` screen + undo bar)
 
 **Interfaces:**
-- Consumes: `Group` (Task 5); `mergeContacts`, `chooseSurvivor`, `MergePlan` (Task 6); `applyMergePlans`, `undoMerge` (Task 9); `Contact` (Task 2).
+- Consumes: `docs/design-system.md`; `Group` (Task 5); `mergeContacts`, `chooseSurvivor`, `MergePlan` (Task 6); `applyMergePlans`, `undoMerge`, `ApplyOutcome` (Task 9); `Contact` (Task 2); primitives `Button`/`Card` and `MergePreview` (Tasks 10–11).
 - Produces:
   - `<NotSureReview group byId onMerge onSkip onBack index total />` — side-by-side members, survivor selector, Merge/Skip.
-  - `<UndoBar outcomes onUndo />` — undo the last applied merge.
+  - `<UndoBar outcomes onUndo />` — sticky bottom bar; undo the last applied merge.
   - `useDeduper().undoLast(): Promise<void>`.
 
 - [ ] **Step 1: Create `src/ui/NotSureReview.tsx`**
@@ -1964,6 +2218,8 @@ import type { Group } from '../engine/analyze';
 import type { Contact } from '../engine/types';
 import { mergeContacts, chooseSurvivor, type MergePlan } from '../engine/merge';
 import { MergePreview } from './MergePreview';
+import { Card } from './components/Card';
+import { Button } from './components/Button';
 
 export function NotSureReview({
   group, byId, index, total, onMerge, onSkip, onBack,
@@ -1981,25 +2237,43 @@ export function NotSureReview({
   const plan = mergeContacts(members, survivorId);
 
   return (
-    <div style={{ padding: 24 }}>
-      <h1>Not sure — review {index + 1} of {total}</h1>
-      <p style={{ color: '#666' }}>{group.reasons.join(' · ') || 'same/similar name only'}</p>
-      <div style={{ display: 'flex', gap: 12 }}>
-        {members.map((m) => (
-          <label key={m.id} style={{ border: '1px solid #ccc', padding: 8, flex: 1 }}>
-            <input type="radio" name="survivor" checked={survivorId === m.id} onChange={() => setSurvivorId(m.id)} />{' '}
-            keep this
-            <div><strong>{m.displayName}</strong></div>
-            <div>emails: {(m.emailAddresses ?? []).map((e) => e.address).join(', ') || '—'}</div>
-            <div>phones: {[m.mobilePhone, ...(m.homePhones ?? []), ...(m.businessPhones ?? [])].filter(Boolean).join(', ') || '—'}</div>
-          </label>
-        ))}
+    <div className="mx-auto max-w-3xl p-6 pb-24">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Not sure — {index + 1} of {total}</h1>
+        <Button variant="ghost" onClick={onBack}>Back</Button>
       </div>
-      <h3>Merged result</h3>
-      <MergePreview plan={plan} />
-      <button onClick={() => onMerge(plan)}>Merge</button>{' '}
-      <button onClick={onSkip}>Skip</button>{' '}
-      <button onClick={onBack}>Back to summary</button>
+      <p className="mt-1 text-sm text-muted-fg">{group.reasons.join(' · ') || 'same/similar name only'}</p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        {members.map((m) => {
+          const selected = survivorId === m.id;
+          const phones = [m.mobilePhone, ...(m.homePhones ?? []), ...(m.businessPhones ?? [])].filter(Boolean) as string[];
+          return (
+            <Card key={m.id} className={selected ? 'ring-2 ring-primary' : ''}>
+              <label className="flex cursor-pointer items-center justify-between gap-2">
+                <span className="font-semibold">{m.displayName || '(no name)'}</span>
+                <span className="inline-flex items-center gap-1 text-xs text-muted-fg">
+                  <input
+                    type="radio"
+                    name="survivor"
+                    className="h-4 w-4 accent-[color:var(--color-primary)]"
+                    checked={selected}
+                    onChange={() => setSurvivorId(m.id)}
+                  />
+                  keep this
+                </span>
+              </label>
+              <div className="mt-2 text-sm text-muted-fg">{(m.emailAddresses ?? []).map((e) => e.address).join(', ') || '—'}</div>
+              <div className="text-sm text-muted-fg">{phones.join(', ') || '—'}</div>
+            </Card>
+          );
+        })}
+      </div>
+      <h3 className="mt-6 text-sm font-semibold text-muted-fg">Merged result</h3>
+      <div className="mt-2"><MergePreview plan={plan} bucket="not-sure" /></div>
+      <div className="mt-4 flex gap-3">
+        <Button onClick={() => onMerge(plan)}>Merge</Button>
+        <Button variant="ghost" onClick={onSkip}>Skip</Button>
+      </div>
     </div>
   );
 }
@@ -2024,16 +2298,26 @@ Add `undoLast` to the returned object.
 - [ ] **Step 3: Create `src/ui/UndoBar.tsx`**
 
 ```tsx
+import { Undo2 } from 'lucide-react';
 import type { ApplyOutcome } from '../graph/apply';
+import { Button } from './components/Button';
 
 export function UndoBar({ outcomes, onUndo }: { outcomes: ApplyOutcome[]; onUndo: () => void }) {
   if (!outcomes.length) return null;
   const merged = outcomes.filter((o) => o.ok).length;
   const failed = outcomes.filter((o) => !o.ok).length;
   return (
-    <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#f4f4f4', padding: 8, borderTop: '1px solid #ccc' }}>
-      {merged} merged{failed ? `, ${failed} failed` : ''}.{' '}
-      <button onClick={onUndo}>Undo last merge</button>
+    <div className="fixed inset-x-0 bottom-0 border-t border-border bg-white/95 px-6 py-3 backdrop-blur">
+      <div className="mx-auto flex max-w-3xl items-center justify-between">
+        <span className="text-sm tabular-nums">
+          <span className="font-semibold text-success">{merged} merged</span>
+          {failed ? <span className="ml-2 text-danger">{failed} failed</span> : null}
+        </span>
+        <Button variant="secondary" onClick={onUndo}>
+          <Undo2 size={16} className="mr-1 inline" aria-hidden />
+          Undo last merge
+        </Button>
+      </div>
     </div>
   );
 }
@@ -2056,11 +2340,14 @@ Add below the very-likely block:
   />
 )}
 {d.phase === 'ready' && d.result && screen === 'not-sure' && d.result.notSure.length === 0 && (
-  <div style={{ padding: 24 }}><p>No more not-sure groups.</p><button onClick={() => setScreen('summary')}>Back</button></div>
+  <div className="mx-auto max-w-3xl p-6">
+    <p className="text-muted-fg">No more not-sure groups.</p>
+    <Button className="mt-3" variant="secondary" onClick={() => setScreen('summary')}>Back to summary</Button>
+  </div>
 )}
 <UndoBar outcomes={d.appliedOutcomes} onUndo={d.undoLast} />
 ```
-Add imports: `import { NotSureReview } from './ui/NotSureReview';` and `import { UndoBar } from './ui/UndoBar';`
+Add imports: `import { NotSureReview } from './ui/NotSureReview';`, `import { UndoBar } from './ui/UndoBar';` (and `Button` is already imported from Task 10).
 
 - [ ] **Step 5: Manual verification (writes to your account)**
 
@@ -2093,6 +2380,7 @@ git commit -m "feat(ui): not-sure review, session undo, and apply flow"
 - §6 merge (survivor, field union, phone structure, notes, preview, PATCH+DELETE, `$batch`) → Task 6 (engine) + Task 9 (Graph) + Task 11 (preview).
 - §7 safety (backup, session undo, no silent deletes) → Task 8 (backup), Task 9 + Task 12 (undo), Tasks 11–12 (consent before delete).
 - §8 UI flow → Tasks 10, 11, 12.
+- **UI design system** (`docs/design-system.md`, added 2026-07-01 via ui-ux-pro-max) → Task 1 (Tailwind + tokens + Inter), Task 10 (shared primitives + summary), Tasks 11–12 (diff-highlighted previews, side-by-side compare, sticky undo). Enforced by the "UI design system" Global Constraint.
 - §9 layout / §10 testing → reflected across all tasks; engine is unit-tested, wrappers have pure-helper tests + manual checks.
 - §11 risks: fuzzy algorithm chosen (Task 3); throttling handled (Task 9); personal-account read/write verified live (Task 7–8 manual steps). Photo-merge is intentionally deferred (survivor keeps its photo) — noted here as the one spec §6 detail not implemented, to keep scope tight; revisit if photos matter.
 
