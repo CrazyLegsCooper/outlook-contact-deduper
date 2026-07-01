@@ -1203,7 +1203,7 @@ export function mergeContacts(contacts: Contact[], survivorId?: string): MergePl
   for (const f of SCALAR_FIELDS) {
     if (!merged[f] || String(merged[f]).trim().length === 0) {
       const v = firstNonEmpty(ordered.map((c) => c[f] as string | undefined));
-      if (v !== undefined) (merged as Record<string, unknown>)[f] = v;
+      if (v !== undefined) (merged as unknown as Record<string, unknown>)[f] = v;
     }
   }
   merged.emailAddresses = mergeEmails(ordered);
