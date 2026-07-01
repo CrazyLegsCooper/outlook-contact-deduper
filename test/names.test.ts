@@ -36,6 +36,11 @@ describe('namesMatchFuzzy', () => {
   it('does NOT match unrelated first names with same surname', () => {
     expect(namesMatchFuzzy('john smith', 'peter smith')).toBe(false);
   });
+  it('does NOT match distinct short first names that differ by one substitution', () => {
+    expect(namesMatchFuzzy('joan smith', 'john smith')).toBe(false);
+    expect(namesMatchFuzzy('mark cooper', 'mary cooper')).toBe(false);
+    expect(namesMatchFuzzy('anna lee', 'anne lee')).toBe(false);
+  });
   it('returns false when either name is empty', () => {
     expect(namesMatchFuzzy('', 'john smith')).toBe(false);
   });
