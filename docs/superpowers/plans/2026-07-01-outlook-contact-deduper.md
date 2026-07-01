@@ -530,6 +530,13 @@ describe('namesMatchFuzzy', () => {
   it('does NOT match unrelated first names with same surname', () => {
     expect(namesMatchFuzzy('john smith', 'peter smith')).toBe(false);
   });
+  it('does NOT match distinct short first names that differ by one substitution', () => {
+    // Guards the transposition typo rule from over-matching (regression for the
+    // rejected 0.5-ratio approach): these are substitutions, not transpositions.
+    expect(namesMatchFuzzy('joan smith', 'john smith')).toBe(false);
+    expect(namesMatchFuzzy('mark cooper', 'mary cooper')).toBe(false);
+    expect(namesMatchFuzzy('anna lee', 'anne lee')).toBe(false);
+  });
   it('returns false when either name is empty', () => {
     expect(namesMatchFuzzy('', 'john smith')).toBe(false);
   });
@@ -587,6 +594,21 @@ function sameNicknameGroup(a: string, b: string): boolean {
   return NICKNAME_GROUPS.some((g) => g.includes(a) && g.includes(b));
 }
 
+// A single adjacent transposition (e.g. "jonh" vs "john"). This catches typos
+// WITHOUT the false positives a low similarity ratio would allow on short names
+// (a substitution like "john"/"joan" is NOT a transposition and stays rejected).
+function isAdjacentTransposition(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  const diffs: number[] = [];
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) diffs.push(i);
+  return (
+    diffs.length === 2 &&
+    diffs[1] === diffs[0] + 1 &&
+    a[diffs[0]] === b[diffs[1]] &&
+    a[diffs[1]] === b[diffs[0]]
+  );
+}
+
 function firstNamesMatch(a: string, b: string): boolean {
   if (!a || !b) return true; // missing first name should not block a surname match
   if (a === b) return true;
@@ -594,7 +616,8 @@ function firstNamesMatch(a: string, b: string): boolean {
   const [short, long] = a.length <= b.length ? [a, b] : [b, a];
   if (short.length >= 3 && long.startsWith(short)) return true; // chris -> christopher
   if (sameNicknameGroup(a, b)) return true;
-  return similarityRatio(a, b) >= 0.8;
+  if (isAdjacentTransposition(a, b)) return true; // "jonh" -> "john" (typo)
+  return similarityRatio(a, b) >= 0.8; // tight ratio: no short-name false positives
 }
 
 function tokens(name: string): string[] {
