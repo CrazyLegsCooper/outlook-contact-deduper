@@ -84,9 +84,15 @@ function mergeNotes(ordered: Contact[]): string | undefined {
 }
 
 export function mergeContacts(contacts: Contact[], survivorId?: string): MergePlan {
+  if (contacts.length === 0) {
+    throw new Error('mergeContacts requires at least one contact');
+  }
   const survivor = survivorId
-    ? contacts.find((c) => c.id === survivorId)!
+    ? contacts.find((c) => c.id === survivorId)
     : chooseSurvivor(contacts);
+  if (!survivor) {
+    throw new Error(`mergeContacts: survivorId ${survivorId} not found in group`);
+  }
   const others = contacts.filter((c) => c.id !== survivor.id);
   const ordered = [survivor, ...others];
 

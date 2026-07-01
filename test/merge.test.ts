@@ -59,4 +59,14 @@ describe('mergeContacts', () => {
     expect(plan.survivor.personalNotes).toContain('note one');
     expect(plan.survivor.personalNotes).toContain('note two');
   });
+
+  it('throws on empty input', () => {
+    expect(() => mergeContacts([])).toThrow(/at least one contact/);
+  });
+
+  it('throws when survivorId is not found in the group', () => {
+    const a: Contact = { id: '1', displayName: 'A' };
+    const b: Contact = { id: '2', displayName: 'B' };
+    expect(() => mergeContacts([a, b], 'no-such-id')).toThrow(/not found/);
+  });
 });
