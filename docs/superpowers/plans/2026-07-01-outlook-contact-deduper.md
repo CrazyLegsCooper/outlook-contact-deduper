@@ -530,6 +530,13 @@ describe('namesMatchFuzzy', () => {
   it('does NOT match unrelated first names with same surname', () => {
     expect(namesMatchFuzzy('john smith', 'peter smith')).toBe(false);
   });
+  it('does NOT match distinct short first names that differ by one substitution', () => {
+    // Guards the transposition typo rule from over-matching (regression for the
+    // rejected 0.5-ratio approach): these are substitutions, not transpositions.
+    expect(namesMatchFuzzy('joan smith', 'john smith')).toBe(false);
+    expect(namesMatchFuzzy('mark cooper', 'mary cooper')).toBe(false);
+    expect(namesMatchFuzzy('anna lee', 'anne lee')).toBe(false);
+  });
   it('returns false when either name is empty', () => {
     expect(namesMatchFuzzy('', 'john smith')).toBe(false);
   });
@@ -587,6 +594,21 @@ function sameNicknameGroup(a: string, b: string): boolean {
   return NICKNAME_GROUPS.some((g) => g.includes(a) && g.includes(b));
 }
 
+// A single adjacent transposition (e.g. "jonh" vs "john"). This catches typos
+// WITHOUT the false positives a low similarity ratio would allow on short names
+// (a substitution like "john"/"joan" is NOT a transposition and stays rejected).
+function isAdjacentTransposition(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  const diffs: number[] = [];
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) diffs.push(i);
+  return (
+    diffs.length === 2 &&
+    diffs[1] === diffs[0] + 1 &&
+    a[diffs[0]] === b[diffs[1]] &&
+    a[diffs[1]] === b[diffs[0]]
+  );
+}
+
 function firstNamesMatch(a: string, b: string): boolean {
   if (!a || !b) return true; // missing first name should not block a surname match
   if (a === b) return true;
@@ -594,7 +616,8 @@ function firstNamesMatch(a: string, b: string): boolean {
   const [short, long] = a.length <= b.length ? [a, b] : [b, a];
   if (short.length >= 3 && long.startsWith(short)) return true; // chris -> christopher
   if (sameNicknameGroup(a, b)) return true;
-  return similarityRatio(a, b) >= 0.8;
+  if (isAdjacentTransposition(a, b)) return true; // "jonh" -> "john" (typo)
+  return similarityRatio(a, b) >= 0.8; // tight ratio: no short-name false positives
 }
 
 function tokens(name: string): string[] {
@@ -1164,9 +1187,15 @@ function mergeNotes(ordered: Contact[]): string | undefined {
 }
 
 export function mergeContacts(contacts: Contact[], survivorId?: string): MergePlan {
+  if (contacts.length === 0) {
+    throw new Error('mergeContacts requires at least one contact');
+  }
   const survivor = survivorId
-    ? contacts.find((c) => c.id === survivorId)!
+    ? contacts.find((c) => c.id === survivorId)
     : chooseSurvivor(contacts);
+  if (!survivor) {
+    throw new Error(`mergeContacts: survivorId ${survivorId} not found in group`);
+  }
   const others = contacts.filter((c) => c.id !== survivor.id);
   const ordered = [survivor, ...others];
 
@@ -1174,7 +1203,7 @@ export function mergeContacts(contacts: Contact[], survivorId?: string): MergePl
   for (const f of SCALAR_FIELDS) {
     if (!merged[f] || String(merged[f]).trim().length === 0) {
       const v = firstNonEmpty(ordered.map((c) => c[f] as string | undefined));
-      if (v !== undefined) (merged as Record<string, unknown>)[f] = v;
+      if (v !== undefined) (merged as unknown as Record<string, unknown>)[f] = v;
     }
   }
   merged.emailAddresses = mergeEmails(ordered);
@@ -1654,6 +1683,13 @@ export interface ApplyOutcome {
   error?: string;
 }
 
+/** Contact ids to remove from local state after applying: only the deleted ids
+ *  of plans whose merge actually succeeded (ok). Failed merges leave their
+ *  contacts in place so the duplicate stays visible for retry. */
+export function removedContactIds(outcomes: ApplyOutcome[]): Set<string> {
+  return new Set(outcomes.filter((o) => o.ok).flatMap((o) => o.plan.deleteIds));
+}
+
 interface BatchResponse {
   responses: Array<{ id: string; status: number; body?: unknown; headers?: Record<string, string> }>;
 }
@@ -1668,20 +1704,60 @@ async function postBatch(token: string, steps: BatchStep[]): Promise<BatchRespon
   return (await res.json()) as BatchResponse;
 }
 
+/**
+ * Build batch steps for multiple plans with ids unique across the ENTIRE batch,
+ * plus a map from each step id back to its owning plan. buildBatchSteps restarts
+ * its counter per call, so we renumber here to avoid cross-plan id collisions.
+ */
+export function buildPlanSteps(plans: MergePlan[]): {
+  steps: BatchStep[];
+  stepPlan: Map<string, MergePlan>;
+  planSteps: BatchStep[][];
+} {
+  const planSteps: BatchStep[][] = [];
+  const stepPlan = new Map<string, MergePlan>();
+  let n = 0;
+  for (const plan of plans) {
+    const group: BatchStep[] = [];
+    for (const s of buildBatchSteps([plan])) {
+      s.id = String(++n);
+      stepPlan.set(s.id, plan);
+      group.push(s);
+    }
+    planSteps.push(group);
+  }
+  return { steps: planSteps.flat(), stepPlan, planSteps };
+}
+
+/** Pack whole plans' step-groups into $batch chunks of at most `size` ops so a
+ *  single plan never straddles a boundary. A lone plan larger than `size`
+ *  (a cluster with >size contacts) is unavoidably split, but never dragged in
+ *  with others. */
+export function packSteps(planSteps: BatchStep[][], size = 20): BatchStep[][] {
+  const groups: BatchStep[][] = [];
+  let current: BatchStep[] = [];
+  for (const ps of planSteps) {
+    if (ps.length > size) {
+      if (current.length) { groups.push(current); current = []; }
+      for (const c of chunk(ps, size)) groups.push(c);
+      continue;
+    }
+    if (current.length + ps.length > size) { groups.push(current); current = []; }
+    current.push(...ps);
+  }
+  if (current.length) groups.push(current);
+  return groups;
+}
+
 /** Apply each plan's PATCH + DELETEs. Retries throttled (429) sub-requests once, honoring Retry-After. */
 export async function applyMergePlans(token: string, plans: MergePlan[]): Promise<ApplyOutcome[]> {
   const outcomes = new Map<string, ApplyOutcome>();
-  // Track which batch-step ids belong to which plan so we can roll status up per plan.
-  const stepPlan = new Map<string, MergePlan>();
-  const allSteps: BatchStep[] = [];
-  for (const plan of plans) {
-    outcomes.set(plan.survivorId, { plan, ok: true });
-    const steps = buildBatchSteps([plan]);
-    for (const s of steps) stepPlan.set(s.id, plan);
-    allSteps.push(...steps);
-  }
+  for (const plan of plans) outcomes.set(plan.survivorId, { plan, ok: true });
+  // Step ids must be unique across the whole batch (Graph requires it); buildPlanSteps
+  // renumbers across plans and returns the id -> plan map for status roll-up.
+  const { stepPlan, planSteps } = buildPlanSteps(plans);
 
-  for (const group of chunk(allSteps, 20)) {
+  for (const group of packSteps(planSteps)) {
     let pending = group;
     for (let attempt = 0; attempt < 2 && pending.length > 0; attempt++) {
       const { responses } = await postBatch(token, pending);
@@ -2080,9 +2156,9 @@ const [appliedOutcomes, setAppliedOutcomes] = useState<import('../graph/apply').
 const applyPlans = useCallback(async (plans: import('../engine/merge').MergePlan[]) => {
   setPhase('applying');
   const token = await getAccessToken();
-  const { applyMergePlans } = await import('../graph/apply');
+  const { applyMergePlans, removedContactIds } = await import('../graph/apply');
   const outcomes = await applyMergePlans(token, plans);
-  const removed = new Set(plans.flatMap((p) => p.deleteIds));
+  const removed = removedContactIds(outcomes);
   setContacts((prev) => {
     const next = prev.filter((c) => !removed.has(c.id));
     setResult(analyze(next));
