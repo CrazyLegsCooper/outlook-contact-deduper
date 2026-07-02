@@ -3,6 +3,8 @@ import { AuthGate } from './auth/AuthGate';
 import { useDeduper } from './ui/useDeduper';
 import { Summary } from './ui/Summary';
 import { VeryLikelyReview } from './ui/VeryLikelyReview';
+import { NotSureReview } from './ui/NotSureReview';
+import { UndoBar } from './ui/UndoBar';
 import { Button } from './ui/components/Button';
 
 type Screen = 'summary' | 'very-likely' | 'not-sure';
@@ -10,6 +12,7 @@ type Screen = 'summary' | 'very-likely' | 'not-sure';
 export default function App() {
   const d = useDeduper();
   const [screen, setScreen] = useState<Screen>('summary');
+  const [nsIndex, setNsIndex] = useState(0);
 
   return (
     <AuthGate>
@@ -44,7 +47,24 @@ export default function App() {
         />
       )}
       {d.phase === 'applying' && <div className="mx-auto max-w-3xl p-6 text-muted-fg">Applying merges…</div>}
-      {/* not-sure screen is added in Task 12 */}
+      {d.phase === 'ready' && d.result && screen === 'not-sure' && d.result.notSure.length > 0 && (
+        <NotSureReview
+          group={d.result.notSure[Math.min(nsIndex, d.result.notSure.length - 1)]}
+          byId={d.byId}
+          index={Math.min(nsIndex, d.result.notSure.length - 1)}
+          total={d.result.notSure.length}
+          onMerge={async (plan) => { await d.applyPlans([plan]); setNsIndex(0); }}
+          onSkip={() => setNsIndex((i) => (i + 1 < d.result!.notSure.length ? i + 1 : 0) )}
+          onBack={() => { setNsIndex(0); setScreen('summary'); }}
+        />
+      )}
+      {d.phase === 'ready' && d.result && screen === 'not-sure' && d.result.notSure.length === 0 && (
+        <div className="mx-auto max-w-3xl p-6">
+          <p className="text-muted-fg">No more not-sure groups.</p>
+          <Button className="mt-3" variant="secondary" onClick={() => setScreen('summary')}>Back to summary</Button>
+        </div>
+      )}
+      <UndoBar outcomes={d.appliedOutcomes} onUndo={d.undoLast} />
     </AuthGate>
   );
 }

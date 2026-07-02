@@ -48,8 +48,18 @@ export function useDeduper() {
     setPhase('ready');
   }, []);
 
+  const undoLast = useCallback(async () => {
+    const last = appliedOutcomes[appliedOutcomes.length - 1];
+    if (!last) return;
+    const token = await getAccessToken();
+    const { undoMerge } = await import('../graph/apply');
+    await undoMerge(token, last.plan);
+    setAppliedOutcomes((prev) => prev.slice(0, -1));
+    // Reload is the simplest correct way to resync ids after a recreate.
+  }, [appliedOutcomes]);
+
   return {
     phase, setPhase, contacts, setContacts, result, setResult, error, load, byId,
-    applyPlans, appliedOutcomes, setAppliedOutcomes,
+    applyPlans, appliedOutcomes, setAppliedOutcomes, undoLast,
   };
 }
