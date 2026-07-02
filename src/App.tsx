@@ -1,27 +1,40 @@
 import { useState } from 'react';
 import { AuthGate } from './auth/AuthGate';
-import { getAccessToken } from './auth/msal';
-import { listAllContacts } from './graph/contacts';
-import { downloadBackup } from './graph/backup';
+import { useDeduper } from './ui/useDeduper';
+import { Summary } from './ui/Summary';
+import { Button } from './ui/components/Button';
+
+type Screen = 'summary' | 'very-likely' | 'not-sure';
 
 export default function App() {
-  const [count, setCount] = useState<number | null>(null);
+  const d = useDeduper();
+  const [screen, setScreen] = useState<Screen>('summary');
+
   return (
     <AuthGate>
-      <div style={{ padding: 24 }}>
-        <h1>Outlook Contact Deduper</h1>
-        <button
-          onClick={async () => {
-            const token = await getAccessToken();
-            const contacts = await listAllContacts(token);
-            downloadBackup(contacts);
-            setCount(contacts.length);
-          }}
-        >
-          Load contacts + backup
-        </button>
-        {count !== null && <p>Loaded {count} contacts; backup downloaded.</p>}
-      </div>
+      {d.phase === 'idle' && (
+        <div className="mx-auto max-w-3xl p-6">
+          <h1 className="text-3xl font-bold text-primary">Outlook Contact Deduper</h1>
+          <p className="mt-1 text-muted-fg">Scan your contacts, back them up, and merge duplicates safely.</p>
+          {d.error && (
+            <p className="mt-3 rounded-lg border border-danger/30 bg-red-50 px-3 py-2 text-sm text-danger" role="alert">
+              Error: {d.error}
+            </p>
+          )}
+          <Button className="mt-4" onClick={d.load}>Load contacts + analyze</Button>
+        </div>
+      )}
+      {d.phase === 'loading' && (
+        <div className="mx-auto max-w-3xl p-6 text-muted-fg">Loading contacts…</div>
+      )}
+      {d.phase === 'ready' && d.result && screen === 'summary' && (
+        <Summary
+          result={d.result}
+          onReviewVeryLikely={() => setScreen('very-likely')}
+          onReviewNotSure={() => setScreen('not-sure')}
+        />
+      )}
+      {/* very-likely and not-sure screens are added in Tasks 11 and 12 */}
     </AuthGate>
   );
 }
