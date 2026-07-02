@@ -31,5 +31,25 @@ export function useDeduper() {
 
   const byId = useCallback((id: string) => contacts.find((c) => c.id === id)!, [contacts]);
 
-  return { phase, setPhase, contacts, setContacts, result, setResult, error, load, byId };
+  const [appliedOutcomes, setAppliedOutcomes] = useState<import('../graph/apply').ApplyOutcome[]>([]);
+
+  const applyPlans = useCallback(async (plans: import('../engine/merge').MergePlan[]) => {
+    setPhase('applying');
+    const token = await getAccessToken();
+    const { applyMergePlans } = await import('../graph/apply');
+    const outcomes = await applyMergePlans(token, plans);
+    const removed = new Set(plans.flatMap((p) => p.deleteIds));
+    setContacts((prev) => {
+      const next = prev.filter((c) => !removed.has(c.id));
+      setResult(analyze(next));
+      return next;
+    });
+    setAppliedOutcomes((prev) => [...prev, ...outcomes]);
+    setPhase('ready');
+  }, []);
+
+  return {
+    phase, setPhase, contacts, setContacts, result, setResult, error, load, byId,
+    applyPlans, appliedOutcomes, setAppliedOutcomes,
+  };
 }

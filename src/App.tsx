@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AuthGate } from './auth/AuthGate';
 import { useDeduper } from './ui/useDeduper';
 import { Summary } from './ui/Summary';
+import { VeryLikelyReview } from './ui/VeryLikelyReview';
 import { Button } from './ui/components/Button';
 
 type Screen = 'summary' | 'very-likely' | 'not-sure';
@@ -34,7 +35,16 @@ export default function App() {
           onReviewNotSure={() => setScreen('not-sure')}
         />
       )}
-      {/* very-likely and not-sure screens are added in Tasks 11 and 12 */}
+      {d.phase === 'ready' && d.result && screen === 'very-likely' && (
+        <VeryLikelyReview
+          groups={d.result.veryLikely}
+          byId={d.byId}
+          onApply={async (plans) => { await d.applyPlans(plans); setScreen('summary'); }}
+          onBack={() => setScreen('summary')}
+        />
+      )}
+      {d.phase === 'applying' && <div className="mx-auto max-w-3xl p-6 text-muted-fg">Applying merges…</div>}
+      {/* not-sure screen is added in Task 12 */}
     </AuthGate>
   );
 }
