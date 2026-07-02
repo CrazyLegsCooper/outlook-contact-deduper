@@ -10,6 +10,13 @@ export interface ApplyOutcome {
   error?: string;
 }
 
+/** Contact ids to remove from local state after applying: only the deleted ids
+ *  of plans whose merge actually succeeded (ok). Failed merges leave their
+ *  contacts in place so the duplicate stays visible for retry. */
+export function removedContactIds(outcomes: ApplyOutcome[]): Set<string> {
+  return new Set(outcomes.filter((o) => o.ok).flatMap((o) => o.plan.deleteIds));
+}
+
 interface BatchResponse {
   responses: Array<{ id: string; status: number; body?: unknown; headers?: Record<string, string> }>;
 }
@@ -29,20 +36,44 @@ async function postBatch(token: string, steps: BatchStep[]): Promise<BatchRespon
  * plus a map from each step id back to its owning plan. buildBatchSteps restarts
  * its counter per call, so we renumber here to avoid cross-plan id collisions.
  */
-export function buildPlanSteps(
-  plans: MergePlan[],
-): { steps: BatchStep[]; stepPlan: Map<string, MergePlan> } {
-  const steps: BatchStep[] = [];
+export function buildPlanSteps(plans: MergePlan[]): {
+  steps: BatchStep[];
+  stepPlan: Map<string, MergePlan>;
+  planSteps: BatchStep[][];
+} {
+  const planSteps: BatchStep[][] = [];
   const stepPlan = new Map<string, MergePlan>();
   let n = 0;
   for (const plan of plans) {
+    const group: BatchStep[] = [];
     for (const s of buildBatchSteps([plan])) {
       s.id = String(++n);
       stepPlan.set(s.id, plan);
-      steps.push(s);
+      group.push(s);
     }
+    planSteps.push(group);
   }
-  return { steps, stepPlan };
+  return { steps: planSteps.flat(), stepPlan, planSteps };
+}
+
+/** Pack whole plans' step-groups into $batch chunks of at most `size` ops so a
+ *  single plan never straddles a boundary. A lone plan larger than `size`
+ *  (a cluster with >size contacts) is unavoidably split, but never dragged in
+ *  with others. */
+export function packSteps(planSteps: BatchStep[][], size = 20): BatchStep[][] {
+  const groups: BatchStep[][] = [];
+  let current: BatchStep[] = [];
+  for (const ps of planSteps) {
+    if (ps.length > size) {
+      if (current.length) { groups.push(current); current = []; }
+      for (const c of chunk(ps, size)) groups.push(c);
+      continue;
+    }
+    if (current.length + ps.length > size) { groups.push(current); current = []; }
+    current.push(...ps);
+  }
+  if (current.length) groups.push(current);
+  return groups;
 }
 
 /** Apply each plan's PATCH + DELETEs. Retries throttled (429) sub-requests once, honoring Retry-After. */
@@ -51,9 +82,9 @@ export async function applyMergePlans(token: string, plans: MergePlan[]): Promis
   for (const plan of plans) outcomes.set(plan.survivorId, { plan, ok: true });
   // Step ids must be unique across the whole batch (Graph requires it); buildPlanSteps
   // renumbers across plans and returns the id -> plan map for status roll-up.
-  const { steps: allSteps, stepPlan } = buildPlanSteps(plans);
+  const { stepPlan, planSteps } = buildPlanSteps(plans);
 
-  for (const group of chunk(allSteps, 20)) {
+  for (const group of packSteps(planSteps)) {
     let pending = group;
     for (let attempt = 0; attempt < 2 && pending.length > 0; attempt++) {
       const { responses } = await postBatch(token, pending);

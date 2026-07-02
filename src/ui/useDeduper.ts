@@ -36,9 +36,9 @@ export function useDeduper() {
   const applyPlans = useCallback(async (plans: import('../engine/merge').MergePlan[]) => {
     setPhase('applying');
     const token = await getAccessToken();
-    const { applyMergePlans } = await import('../graph/apply');
+    const { applyMergePlans, removedContactIds } = await import('../graph/apply');
     const outcomes = await applyMergePlans(token, plans);
-    const removed = new Set(plans.flatMap((p) => p.deleteIds));
+    const removed = removedContactIds(outcomes);
     setContacts((prev) => {
       const next = prev.filter((c) => !removed.has(c.id));
       setResult(analyze(next));
