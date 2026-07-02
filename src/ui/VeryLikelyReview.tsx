@@ -3,6 +3,7 @@ import type { Group } from '../engine/analyze';
 import type { Contact } from '../engine/types';
 import { mergeContacts, type MergePlan } from '../engine/merge';
 import { MergePreview } from './MergePreview';
+import { SourceContacts } from './SourceContacts';
 import { Button } from './components/Button';
 
 export function VeryLikelyReview({
@@ -43,6 +44,8 @@ export function VeryLikelyReview({
             />
             <div className="flex-1">
               <p className="mb-1 text-xs text-muted-fg">{groups[i].reasons.join(' · ')}</p>
+              <SourceContacts contacts={groups[i].ids.map(byId)} />
+              <p className="my-1 text-xs font-medium text-muted-fg">merges into ↓</p>
               <MergePreview plan={plan} bucket="very-likely" />
             </div>
           </div>

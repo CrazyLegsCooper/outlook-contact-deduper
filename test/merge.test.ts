@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeContacts, chooseSurvivor } from '../src/engine/merge';
+import { mergeContacts, chooseSurvivor, resolveSurvivorId } from '../src/engine/merge';
 import type { Contact } from '../src/engine/types';
 
 describe('chooseSurvivor', () => {
@@ -68,5 +68,25 @@ describe('mergeContacts', () => {
     const a: Contact = { id: '1', displayName: 'A' };
     const b: Contact = { id: '2', displayName: 'B' };
     expect(() => mergeContacts([a, b], 'no-such-id')).toThrow(/not found/);
+  });
+});
+
+describe('resolveSurvivorId', () => {
+  const a: Contact = { id: '1', displayName: 'A', jobTitle: 'X' }; // most complete
+  const b: Contact = { id: '2', displayName: 'B' };
+
+  it('keeps a chosen id that belongs to the group', () => {
+    expect(resolveSurvivorId([a, b], '2')).toBe('2');
+  });
+
+  it('falls back to the auto-picked survivor when the chosen id is stale (from another group)', () => {
+    // This is the crash case: a survivor id left over from a previously-viewed
+    // group is no longer a member here. It must not be passed to mergeContacts.
+    expect(resolveSurvivorId([a, b], 'stale-id-from-prev-group')).toBe(chooseSurvivor([a, b]).id);
+  });
+
+  it('uses the auto-picked survivor when nothing is chosen yet', () => {
+    expect(resolveSurvivorId([a, b], null)).toBe(chooseSurvivor([a, b]).id);
+    expect(resolveSurvivorId([a, b], undefined)).toBe(chooseSurvivor([a, b]).id);
   });
 });

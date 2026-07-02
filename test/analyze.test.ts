@@ -26,6 +26,19 @@ describe('analyze', () => {
     expect(result.notSure).toHaveLength(1);
   });
 
+  it('does not chain unrelated people through a shared first name', () => {
+    // "Rob" fuzzy-matches both "Robert Cascone" and "Robert Wragg" by first name,
+    // but Cascone and Wragg are different people and share no phone/email. The old
+    // union-find bridged all three into one bogus not-sure cluster.
+    const result = analyze([
+      c('1', { displayName: 'Robert Cascone', emailAddresses: [{ address: 'rc@law.com' }] }),
+      c('2', { displayName: 'Rob', mobilePhone: '904-403-7414' }),
+      c('3', { displayName: 'Robert Wragg', mobilePhone: '352-449-9535' }),
+    ]);
+    expect(result.veryLikely).toHaveLength(0);
+    expect(result.notSure).toHaveLength(0);
+  });
+
   it('excludes a very-likely contact from not-sure groups', () => {
     // 1 & 2 share an email (very-likely). 2 & 3 share only a name (not-sure).
     const result = analyze([
