@@ -47,4 +47,32 @@ describe('findCandidatePairs', () => {
     ]);
     expect(pairs).toHaveLength(0);
   });
+
+  it('does NOT make a name-only pair from a bare first name (no surname to compare)', () => {
+    // "Rob" fuzzy-matches "Robert Cascone" by first name, but with no surname
+    // and no shared phone/email it is too weak to cluster.
+    const pairs = findCandidatePairs([
+      c('1', { displayName: 'Rob' }),
+      c('2', { displayName: 'Robert Cascone' }),
+    ]);
+    expect(pairs).toHaveLength(0);
+  });
+
+  it('still flags a bare first name as very-likely when a phone is shared', () => {
+    const pairs = findCandidatePairs([
+      c('1', { displayName: 'Rob', mobilePhone: '904-403-7414' }),
+      c('2', { displayName: 'Robert Cascone', mobilePhone: '(904) 403-7414' }),
+    ]);
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0].bucket).toBe('very-likely');
+  });
+
+  it('flags a fuzzy name with matching surname as not-sure (no shared contact info)', () => {
+    const pairs = findCandidatePairs([
+      c('1', { displayName: 'Chris Cooper' }),
+      c('2', { displayName: 'Christopher Cooper' }),
+    ]);
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0].bucket).toBe('not-sure');
+  });
 });

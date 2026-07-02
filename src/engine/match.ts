@@ -16,6 +16,10 @@ function intersect(a: string[], b: string[]): string[] {
   return a.filter((x) => setB.has(x));
 }
 
+function wordCount(name: string): number {
+  return name.split(/\s+/).filter(Boolean).length;
+}
+
 export function findCandidatePairs(contacts: Contact[]): CandidatePair[] {
   const pairs: CandidatePair[] = [];
   const emails = contacts.map(contactEmails);
@@ -28,6 +32,13 @@ export function findCandidatePairs(contacts: Contact[]): CandidatePair[] {
       const sharedPhones = intersect(phones[i], phones[j]);
       const nameExact = names[i].length > 0 && names[i] === names[j];
       const nameFuzzy = namesMatchFuzzy(names[i], names[j]);
+      // A name-only match (no shared phone/email) is only strong enough to
+      // cluster when both names carry a surname — so the surnames are actually
+      // compared — or the full names are identical. Without this, a bare first
+      // name like "Rob" fuzzy-matches every "Robert X" and transitively bridges
+      // unrelated people into one bogus group.
+      const bothHaveSurname = wordCount(names[i]) >= 2 && wordCount(names[j]) >= 2;
+      const nameOnlyStrong = nameExact || (nameFuzzy && bothHaveSurname);
       const reasons: string[] = [];
 
       if (sharedEmails.length) reasons.push(`shared email: ${sharedEmails.join(', ')}`);
@@ -42,7 +53,7 @@ export function findCandidatePairs(contacts: Contact[]): CandidatePair[] {
 
       const notSure =
         !veryLikely &&
-        (nameExact || nameFuzzy) &&
+        nameOnlyStrong &&
         sharedEmails.length === 0 &&
         sharedPhones.length === 0;
 

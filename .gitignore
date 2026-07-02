@@ -5,6 +5,14 @@ contacts-backup-*.json
 exports/
 backups/
 *.contacts.json
+# iCloud / Apple Contacts vCard exports
+*.vcf
+# Playwright working dir holds screenshots + a real contacts backup
+.playwright-mcp/
+# Stray Playwright screenshots (may contain real contact data)
+/authgate.png
+/passkey-prompt.png
+/very-likely-review.png
 
 # Real app config containing your Entra client ID (use config.example.ts as the template)
 src/config.ts

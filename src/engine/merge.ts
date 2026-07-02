@@ -30,6 +30,20 @@ export function completenessScore(c: Contact): number {
   return score;
 }
 
+/**
+ * Pick the survivor id to use for a group, tolerating a stale selection.
+ *
+ * The Not-sure review keeps the chosen survivor in component state. When the
+ * user advances to a different group the same component instance is reused, so
+ * that state can point at a contact that is NOT in the current group. Passing
+ * such an id to `mergeContacts` throws and crashes the render tree. This guard
+ * keeps a valid choice but otherwise falls back to the auto-picked survivor.
+ */
+export function resolveSurvivorId(contacts: Contact[], chosenId?: string | null): string {
+  if (chosenId && contacts.some((c) => c.id === chosenId)) return chosenId;
+  return chooseSurvivor(contacts).id;
+}
+
 export function chooseSurvivor(contacts: Contact[]): Contact {
   return [...contacts].sort((a, b) => {
     const s = completenessScore(b) - completenessScore(a);

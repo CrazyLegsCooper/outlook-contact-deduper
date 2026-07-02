@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Group } from '../engine/analyze';
 import type { Contact } from '../engine/types';
-import { mergeContacts, chooseSurvivor, type MergePlan } from '../engine/merge';
+import { mergeContacts, resolveSurvivorId, type MergePlan } from '../engine/merge';
 import { MergePreview } from './MergePreview';
 import { Card } from './components/Card';
 import { Button } from './components/Button';
@@ -18,7 +18,10 @@ export function NotSureReview({
   onBack: () => void;
 }) {
   const members = group.ids.map(byId);
-  const [survivorId, setSurvivorId] = useState<string>(chooseSurvivor(members).id);
+  // Store only the user's explicit pick; derive the effective survivor each
+  // render so a pick left over from a previous group can never be used here.
+  const [chosenId, setChosenId] = useState<string | null>(null);
+  const survivorId = resolveSurvivorId(members, chosenId);
   const plan = mergeContacts(members, survivorId);
 
   return (
@@ -42,7 +45,7 @@ export function NotSureReview({
                     name="survivor"
                     className="h-4 w-4 accent-[color:var(--color-primary)]"
                     checked={selected}
-                    onChange={() => setSurvivorId(m.id)}
+                    onChange={() => setChosenId(m.id)}
                   />
                   keep this
                 </span>
