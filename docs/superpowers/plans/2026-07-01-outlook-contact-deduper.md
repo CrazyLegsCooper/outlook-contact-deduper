@@ -1697,18 +1697,34 @@ async function postBatch(token: string, steps: BatchStep[]): Promise<BatchRespon
   return (await res.json()) as BatchResponse;
 }
 
+/**
+ * Build batch steps for multiple plans with ids unique across the ENTIRE batch,
+ * plus a map from each step id back to its owning plan. buildBatchSteps restarts
+ * its counter per call, so we renumber here to avoid cross-plan id collisions.
+ */
+export function buildPlanSteps(
+  plans: MergePlan[],
+): { steps: BatchStep[]; stepPlan: Map<string, MergePlan> } {
+  const steps: BatchStep[] = [];
+  const stepPlan = new Map<string, MergePlan>();
+  let n = 0;
+  for (const plan of plans) {
+    for (const s of buildBatchSteps([plan])) {
+      s.id = String(++n);
+      stepPlan.set(s.id, plan);
+      steps.push(s);
+    }
+  }
+  return { steps, stepPlan };
+}
+
 /** Apply each plan's PATCH + DELETEs. Retries throttled (429) sub-requests once, honoring Retry-After. */
 export async function applyMergePlans(token: string, plans: MergePlan[]): Promise<ApplyOutcome[]> {
   const outcomes = new Map<string, ApplyOutcome>();
-  // Track which batch-step ids belong to which plan so we can roll status up per plan.
-  const stepPlan = new Map<string, MergePlan>();
-  const allSteps: BatchStep[] = [];
-  for (const plan of plans) {
-    outcomes.set(plan.survivorId, { plan, ok: true });
-    const steps = buildBatchSteps([plan]);
-    for (const s of steps) stepPlan.set(s.id, plan);
-    allSteps.push(...steps);
-  }
+  for (const plan of plans) outcomes.set(plan.survivorId, { plan, ok: true });
+  // Step ids must be unique across the whole batch (Graph requires it); buildPlanSteps
+  // renumbers across plans and returns the id -> plan map for status roll-up.
+  const { steps: allSteps, stepPlan } = buildPlanSteps(plans);
 
   for (const group of chunk(allSteps, 20)) {
     let pending = group;
